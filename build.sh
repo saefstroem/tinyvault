@@ -44,12 +44,13 @@ aapt2 compile --dir "$here/res" -o "$out/res.zip"
 aapt2 link -o "$out/unsigned.apk" -I "$jar" --manifest "$here/AndroidManifest.xml" \
     --version-code "$(date +%s)" --version-name "$version" "$out/res.zip"
 (cd "$out/dex" && zip -q -X ../unsigned.apk classes.dex)
-# Android 11+ installs only if resources.arsc is stored uncompressed on a 4-byte boundary. aapt2 writes it that way and
-# zip leaves existing entries alone, so this only confirms it; Termux has no zipalign to fix it otherwise.
-arsc=$(unzip -Z -v "$out/unsigned.apk" resources.arsc | awk '/offset of local header/ {o=$NF} /length of filename/ {f=$(NF-1)}
-    /length of extra field/ {e=$(NF-1)} /compression method/ {m=$NF} END {print (o+30+f+e)%4, m}')
-if [ "$arsc" != "0 (stored)" ]; then
-    echo "build.sh: resources.arsc is not stored 4-byte aligned (offset remainder and method: $arsc)" >&2
+# Android 11+ installs only if resources.arsc is stored uncompressed on a 4-byte boundary. aapt2 pads the entry's local
+# header to make it so and zip leaves existing entries alone; Termux has no zipalign, so this reads that header to confirm.
+offset=$(unzip -Z -v "$out/unsigned.apk" resources.arsc | awk '/offset of local header/ {print $NF}')
+set -- $(dd if="$out/unsigned.apk" bs=1 skip=$((offset + 8)) count=2 2>/dev/null | od -An -tu2) \
+    $(dd if="$out/unsigned.apk" bs=1 skip=$((offset + 26)) count=4 2>/dev/null | od -An -tu2)
+if [ "$1" != 0 ] || [ $(( (offset + 30 + $2 + $3) % 4 )) != 0 ]; then
+    echo "build.sh: resources.arsc is not stored on a 4-byte boundary (method $1, name $2, padding $3, header at $offset)" >&2
     exit 1
 fi
 
