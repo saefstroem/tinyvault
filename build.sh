@@ -3,7 +3,7 @@
 #
 #   Builds out/tinyvault.apk from this checkout, checks what it declares and contains, and only then opens it in
 #   Android's installer.
-#   On the phone, in Termux: pkg install git openjdk-21 aapt d8 apksigner zip unzip curl
+#   On the phone, in Termux: pkg install git openjdk-21 aapt aapt2 d8 apksigner zip unzip curl
 #   android.jar comes from Google once, checked against the SHA-1 Google lists and the one pinned here.
 #   The signing key keystore/tinyvault.jks is made on first use. Keep it: Android only lets an APK signed with the
 #   same key replace the installed tinyvault.
@@ -41,17 +41,24 @@ d8 --release --min-api 35 --lib "$jar" --output "$out/dex" "$out/classes.jar"
 version=$(git -C "$here" rev-parse --short=12 HEAD)
 [ -z "$(git -C "$here" status --porcelain --untracked-files=normal)" ] || version=$version-dirty
 aapt2 compile --dir "$here/res" -o "$out/res.zip"
-aapt2 link -o "$out/unaligned.apk" -I "$jar" --manifest "$here/AndroidManifest.xml" \
+aapt2 link -o "$out/unsigned.apk" -I "$jar" --manifest "$here/AndroidManifest.xml" \
     --version-code "$(date +%s)" --version-name "$version" "$out/res.zip"
-(cd "$out/dex" && zip -q -X ../unaligned.apk classes.dex)
-zipalign -f 4 "$out/unaligned.apk" "$out/aligned.apk"
+(cd "$out/dex" && zip -q -X ../unsigned.apk classes.dex)
+# Android 11+ installs only if resources.arsc is stored uncompressed on a 4-byte boundary. aapt2 writes it that way and
+# zip leaves existing entries alone, so this only confirms it; Termux has no zipalign to fix it otherwise.
+arsc=$(unzip -Z -v "$out/unsigned.apk" resources.arsc | awk '/offset of local header/ {o=$NF} /length of filename/ {f=$(NF-1)}
+    /length of extra field/ {e=$(NF-1)} /compression method/ {m=$NF} END {print (o+30+f+e)%4, m}')
+if [ "$arsc" != "0 (stored)" ]; then
+    echo "build.sh: resources.arsc is not stored 4-byte aligned (offset remainder and method: $arsc)" >&2
+    exit 1
+fi
 
 keystore=$here/keystore/tinyvault.jks
 if [ ! -f "$keystore" ]; then
     mkdir -p "$here/keystore"
     keytool -genkeypair -keystore "$keystore" -alias tinyvault -keyalg RSA -keysize 2048 -validity 10000 -dname CN=tinyvault
 fi
-apksigner sign --ks "$keystore" --out "$out/tinyvault.apk" "$out/aligned.apk"
+apksigner sign --ks "$keystore" --out "$out/tinyvault.apk" "$out/unsigned.apk"
 
 declared=$(aapt2 dump badging "$out/tinyvault.apk" \
     | grep -oE "^(package|uses-permission|launchable-activity): name='[^']+'" | tr '\n' ' ')
