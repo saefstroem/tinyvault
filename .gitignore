@@ -1,0 +1,5 @@
+/sdk/
+/keystore/
+/out/
+/test/out/
+*.md

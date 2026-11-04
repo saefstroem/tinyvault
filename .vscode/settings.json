@@ -1,0 +1,7 @@
+{
+  // No build system, so tell the Java extension where the sources are and which android.jar they compile against.
+  // sdk/ is gitignored: copy android/sdk/android-35/android.jar from txcourier, or run build.sh once, to populate it.
+  "java.project.sourcePaths": ["src", "test"],
+  "java.project.referencedLibraries": ["sdk/android-35/android.jar"],
+  "java.project.outputPath": "out/vscode"
+}

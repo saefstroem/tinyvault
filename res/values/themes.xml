@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Undo history would keep every typed key and note as Strings that nothing can zero (Editor.UndoInputFilter
+     records each edit as Strings and exempts nothing); allowUndo has no setter, so it is turned off here. -->
+<resources>
+    <style name="Vault" parent="@android:style/Theme.DeviceDefault.DayNight">
+        <item name="android:editTextStyle">@style/Field</item>
+    </style>
+    <style name="Field" parent="@android:style/Widget.DeviceDefault.EditText">
+        <item name="android:allowUndo">false</item>
+    </style>
+</resources>
